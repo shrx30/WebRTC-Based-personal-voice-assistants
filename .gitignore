@@ -1,0 +1,15 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+.env
+*.wav
+*.mp3
+*.m4a
+input.wav
+speech.wav
+webrtc_raw.wav
+mic_direct.wav
+mic_test.wav
+.vscode/
+.idea/
