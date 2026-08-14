@@ -1,0 +1,1103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Voice Agent WebRTC</title>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 850px;
+            margin: 40px auto;
+            padding: 20px;
+        }
+
+        h1 {
+            margin-bottom: 25px;
+        }
+
+        .box {
+            border: 1px solid #ccc;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        select {
+            width: 100%;
+            padding: 12px;
+            margin: 10px 0;
+            font-size: 15px;
+        }
+
+        button {
+            padding: 12px 18px;
+            margin: 5px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 15px;
+        }
+
+        #status {
+            background: #111;
+            color: #00ff88;
+            padding: 15px;
+            min-height: 350px;
+            white-space: pre-wrap;
+            font-family: Consolas, monospace;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+
+<body>
+
+<h1>🎤 Voice Agent WebRTC</h1>
+
+
+<!-- ========================================================= -->
+<!-- MICROPHONE -->
+<!-- ========================================================= -->
+
+<div class="box">
+
+    <h2>1. Microphone</h2>
+
+    <select id="microphone">
+        <option value="">Default microphone</option>
+    </select>
+
+    <br>
+
+    <button onclick="getMicrophones()">
+        🔄 Refresh microphones
+    </button>
+
+</div>
+
+
+<!-- ========================================================= -->
+<!-- DIRECT BROWSER TEST -->
+<!-- ========================================================= -->
+
+<div class="box">
+
+    <h2>2. Browser microphone test</h2>
+
+    <button onclick="recordBrowserMic()">
+        🎤 Record 5 Seconds
+    </button>
+
+</div>
+
+
+<!-- ========================================================= -->
+<!-- WEBRTC -->
+<!-- ========================================================= -->
+
+<div class="box">
+
+    <h2>3. WebRTC</h2>
+
+    <button onclick="startWebRTC()">
+        ▶ Start
+    </button>
+
+    <button onclick="stopWebRTC()">
+        ⏹ Stop
+    </button>
+
+</div>
+
+
+<!-- ========================================================= -->
+<!-- LOG -->
+<!-- ========================================================= -->
+
+<div id="status">
+Ready.
+</div>
+
+
+<script>
+
+let selectedStream = null;
+let peerConnection = null;
+let microphoneTrack = null;
+let audioTransceiver = null;
+
+const microphoneSelect =
+    document.getElementById("microphone");
+
+const statusBox =
+    document.getElementById("status");
+
+
+// ============================================================
+// LOGGING
+// ============================================================
+
+function log(message) {
+
+    console.log(message);
+
+    statusBox.textContent +=
+        "\n" + message;
+
+    statusBox.scrollTop =
+        statusBox.scrollHeight;
+}
+
+
+function clearLog() {
+
+    statusBox.textContent = "";
+}
+
+
+// ============================================================
+// GET MICROPHONES
+// ============================================================
+
+async function getMicrophones() {
+
+    try {
+
+        /*
+         * Request permission first.
+         * This allows Chrome/Edge to expose
+         * actual microphone names.
+         */
+
+        const tempStream =
+            await navigator.mediaDevices
+                .getUserMedia({
+                    audio: true
+                });
+
+
+        tempStream
+            .getTracks()
+            .forEach(
+                track => track.stop()
+            );
+
+
+        const devices =
+            await navigator.mediaDevices
+                .enumerateDevices();
+
+
+        microphoneSelect.innerHTML = "";
+
+
+        const microphones =
+            devices.filter(
+                device =>
+                    device.kind ===
+                    "audioinput"
+            );
+
+
+        for (
+            const device
+            of microphones
+        ) {
+
+            const option =
+                document.createElement(
+                    "option"
+                );
+
+
+            option.value =
+                device.deviceId;
+
+
+            option.textContent =
+                device.label ||
+                "Microphone";
+
+
+            microphoneSelect
+                .appendChild(option);
+        }
+
+
+        log(
+            `Found ${microphones.length} microphone(s)`
+        );
+
+
+        microphones.forEach(
+            (mic, index) => {
+
+                log(
+                    `${index + 1}. ${mic.label}`
+                );
+            }
+        );
+
+
+    } catch (error) {
+
+        log(
+            "❌ Microphone error: " +
+            error
+        );
+    }
+}
+
+
+// ============================================================
+// GET MICROPHONE STREAM
+// ============================================================
+
+async function getMicrophoneStream() {
+
+    const deviceId =
+        microphoneSelect.value;
+
+
+    const constraints = {
+
+        audio: {
+
+            channelCount: {
+                ideal: 1
+            },
+
+            sampleRate: {
+                ideal: 48000
+            },
+
+            sampleSize: {
+                ideal: 16
+            },
+
+            echoCancellation: false,
+
+            noiseSuppression: false,
+
+            autoGainControl: false
+        },
+
+        video: false
+    };
+
+
+    if (deviceId) {
+
+        constraints.audio.deviceId = {
+            exact: deviceId
+        };
+    }
+
+
+    log(
+        "🎤 Requesting microphone..."
+    );
+
+
+    const stream =
+        await navigator.mediaDevices
+            .getUserMedia(
+                constraints
+            );
+
+
+    const track =
+        stream.getAudioTracks()[0];
+
+
+    log(
+        "🎤 Microphone: " +
+        track.label
+    );
+
+
+    log(
+        "🎤 Track state: " +
+        track.readyState
+    );
+
+
+    const settings =
+        track.getSettings();
+
+
+    log(
+        "\n========== MICROPHONE =========="
+    );
+
+
+    log(
+        "sampleRate: " +
+        settings.sampleRate
+    );
+
+
+    log(
+        "sampleSize: " +
+        settings.sampleSize
+    );
+
+
+    log(
+        "channelCount: " +
+        settings.channelCount
+    );
+
+
+    log(
+        "echoCancellation: " +
+        settings.echoCancellation
+    );
+
+
+    log(
+        "noiseSuppression: " +
+        settings.noiseSuppression
+    );
+
+
+    log(
+        "autoGainControl: " +
+        settings.autoGainControl
+    );
+
+
+    log(
+        "================================"
+    );
+
+
+    return stream;
+}
+
+
+// ============================================================
+// DIRECT BROWSER RECORDING
+// ============================================================
+
+async function recordBrowserMic() {
+
+    clearLog();
+
+
+    log(
+        "🎤 Starting browser microphone test..."
+    );
+
+
+    try {
+
+        const stream =
+            await getMicrophoneStream();
+
+
+        selectedStream =
+            stream;
+
+
+        const mimeTypes = [
+
+            "audio/webm;codecs=opus",
+
+            "audio/webm",
+
+            "audio/ogg;codecs=opus"
+        ];
+
+
+        let mimeType = "";
+
+
+        for (
+            const type
+            of mimeTypes
+        ) {
+
+            if (
+                MediaRecorder
+                    .isTypeSupported(type)
+            ) {
+
+                mimeType =
+                    type;
+
+                break;
+            }
+        }
+
+
+        log(
+            "Recorder: " +
+            mimeType
+        );
+
+
+        const recorder =
+            new MediaRecorder(
+                stream,
+                mimeType
+                    ? {
+                        mimeType:
+                            mimeType
+                    }
+                    : undefined
+            );
+
+
+        const chunks = [];
+
+
+        recorder.ondataavailable =
+            event => {
+
+                if (
+                    event.data &&
+                    event.data.size > 0
+                ) {
+
+                    chunks.push(
+                        event.data
+                    );
+                }
+            };
+
+
+        recorder.onerror =
+            event => {
+
+                log(
+                    "❌ Recorder error"
+                );
+
+                console.error(event);
+            };
+
+
+        recorder.onstop =
+            () => {
+
+                const blob =
+                    new Blob(
+                        chunks,
+                        {
+                            type:
+                                recorder.mimeType
+                        }
+                    );
+
+
+                const url =
+                    URL.createObjectURL(
+                        blob
+                    );
+
+
+                const link =
+                    document.createElement(
+                        "a"
+                    );
+
+
+                link.href = url;
+
+                link.download =
+                    "browser_mic.webm";
+
+
+                document.body.appendChild(
+                    link
+                );
+
+
+                link.click();
+
+
+                link.remove();
+
+
+                setTimeout(
+                    () =>
+                        URL.revokeObjectURL(
+                            url
+                        ),
+                    1000
+                );
+
+
+                log(
+                    "\n✅ browser_mic.webm saved"
+                );
+
+
+                log(
+                    "Listen to the file."
+                );
+
+
+                stream
+                    .getTracks()
+                    .forEach(
+                        track =>
+                            track.stop()
+                    );
+            };
+
+
+        log(
+            "🔴 Recording for 5 seconds..."
+        );
+
+
+        recorder.start(100);
+
+
+        setTimeout(
+            () => {
+
+                if (
+                    recorder.state ===
+                    "recording"
+                ) {
+
+                    recorder.stop();
+                }
+
+            },
+            5000
+        );
+
+
+    } catch (error) {
+
+        log(
+            "❌ Browser recording failed:\n" +
+            error
+        );
+    }
+}
+
+
+// ============================================================
+// WEBRTC
+// ============================================================
+
+async function startWebRTC() {
+
+    clearLog();
+
+
+    log(
+        "Starting WebRTC..."
+    );
+
+
+    try {
+
+        // ----------------------------------------------------
+        // MICROPHONE
+        // ----------------------------------------------------
+
+        const stream =
+            await getMicrophoneStream();
+
+
+        selectedStream =
+            stream;
+
+
+        microphoneTrack =
+            stream.getAudioTracks()[0];
+
+
+        // ----------------------------------------------------
+        // PEER CONNECTION
+        // ----------------------------------------------------
+
+        peerConnection =
+            new RTCPeerConnection({
+                iceServers: []
+            });
+
+
+        log(
+            "PeerConnection created"
+        );
+
+
+        // ----------------------------------------------------
+        // CONNECTION EVENTS
+        // ----------------------------------------------------
+
+        peerConnection
+            .oniceconnectionstatechange =
+            () => {
+
+                log(
+                    "ICE state: " +
+                    peerConnection
+                        .iceConnectionState
+                );
+            };
+
+
+        peerConnection
+            .onconnectionstatechange =
+            () => {
+
+                log(
+                    "Connection state: " +
+                    peerConnection
+                        .connectionState
+                );
+
+
+                if (
+                    peerConnection
+                        .connectionState ===
+                    "failed"
+                ) {
+
+                    log(
+                        "❌ WebRTC connection failed"
+                    );
+                }
+            };
+
+
+        peerConnection
+            .onicegatheringstatechange =
+            () => {
+
+                log(
+                    "ICE gathering: " +
+                    peerConnection
+                        .iceGatheringState
+                );
+            };
+
+
+        // ----------------------------------------------------
+        // AUDIO TRANSCEIVER
+        //
+        // IMPORTANT:
+        // Do NOT use addTrack() here.
+        // We explicitly create an audio
+        // send-only transceiver.
+        // ----------------------------------------------------
+
+        audioTransceiver =
+            peerConnection
+                .addTransceiver(
+                    "audio",
+                    {
+                        direction:
+                            "sendonly"
+                    }
+                );
+
+
+        log(
+            "Audio transceiver created"
+        );
+
+
+        // ----------------------------------------------------
+        // FORCE OPUS
+        // ----------------------------------------------------
+
+        const capabilities =
+            RTCRtpSender
+                .getCapabilities(
+                    "audio"
+                );
+
+
+        if (
+            capabilities &&
+            capabilities.codecs
+        ) {
+
+            const opusCodecs =
+                capabilities.codecs
+                    .filter(
+                        codec =>
+                            codec.mimeType
+                                .toLowerCase() ===
+                            "audio/opus"
+                    );
+
+
+            if (
+                opusCodecs.length > 0
+            ) {
+
+                audioTransceiver
+                    .setCodecPreferences(
+                        opusCodecs
+                    );
+
+
+                log(
+                    "✅ Opus codec selected"
+                );
+
+            } else {
+
+                log(
+                    "⚠️ Opus codec not found"
+                );
+            }
+        }
+
+
+        // ----------------------------------------------------
+        // ATTACH MICROPHONE
+        // ----------------------------------------------------
+
+        await audioTransceiver
+            .sender
+            .replaceTrack(
+                microphoneTrack
+            );
+
+
+        log(
+            "🎤 Microphone track attached"
+        );
+
+
+        // ----------------------------------------------------
+        // TRACK INFO
+        // ----------------------------------------------------
+
+        const sender =
+            audioTransceiver.sender;
+
+
+        const parameters =
+            sender.getParameters();
+
+
+        if (
+            parameters.encodings &&
+            parameters.encodings.length
+        ) {
+
+            /*
+             * Keep a single audio encoding.
+             */
+
+            parameters.encodings =
+                parameters.encodings.map(
+                    encoding => ({
+                        ...encoding,
+                        maxBitrate:
+                            128000
+                    })
+                );
+
+
+            try {
+
+                await sender
+                    .setParameters(
+                        parameters
+                    );
+
+                log(
+                    "Audio bitrate: 128 kbps"
+                );
+
+            } catch (error) {
+
+                log(
+                    "⚠️ Could not set bitrate: " +
+                    error
+                );
+            }
+        }
+
+
+        // ----------------------------------------------------
+        // CREATE OFFER
+        // ----------------------------------------------------
+
+        const offer =
+            await peerConnection
+                .createOffer();
+
+
+        log(
+            "Offer created"
+        );
+
+
+        await peerConnection
+            .setLocalDescription(
+                offer
+            );
+
+
+        log(
+            "Local description set"
+        );
+
+
+        // ----------------------------------------------------
+        // WAIT FOR ICE
+        // ----------------------------------------------------
+
+        await waitForIceGathering(
+            peerConnection
+        );
+
+
+        log(
+            "ICE gathering complete"
+        );
+
+
+        // ----------------------------------------------------
+        // SEND TO SERVER
+        // ----------------------------------------------------
+
+        const url =
+            "http://127.0.0.1:8000/offer";
+
+
+        log(
+            "Sending offer to " + url
+        );
+
+
+        const response =
+            await fetch(
+                url,
+                {
+                    method: "POST",
+
+                    headers: {
+                        "Content-Type":
+                            "application/json"
+                    },
+
+                    body:
+                        JSON.stringify({
+                            sdp:
+                                peerConnection
+                                    .localDescription
+                                    .sdp,
+
+                            type:
+                                peerConnection
+                                    .localDescription
+                                    .type
+                        })
+                }
+            );
+
+
+        log(
+            "Server response: " +
+            response.status
+        );
+
+
+        if (!response.ok) {
+
+            const errorText =
+                await response.text();
+
+            throw new Error(
+                errorText
+            );
+        }
+
+
+        const answer =
+            await response.json();
+
+
+        log(
+            "Answer received"
+        );
+
+
+        await peerConnection
+            .setRemoteDescription(
+                answer
+            );
+
+
+        log(
+            "Remote description set"
+        );
+
+
+        log(
+            "================================"
+        );
+
+        log(
+            "✅ WebRTC negotiation completed"
+        );
+
+        log(
+            "================================"
+        );
+
+
+    } catch (error) {
+
+        log(
+            "❌ WebRTC error:\n" +
+            error
+        );
+
+        console.error(error);
+    }
+}
+
+
+// ============================================================
+// ICE GATHERING
+// ============================================================
+
+function waitForIceGathering(pc) {
+
+    return new Promise(
+        resolve => {
+
+            if (
+                pc.iceGatheringState ===
+                "complete"
+            ) {
+
+                resolve();
+
+                return;
+            }
+
+
+            const timeout =
+                setTimeout(
+                    () => {
+
+                        resolve();
+
+                    },
+                    5000
+                );
+
+
+            const check =
+                () => {
+
+                    if (
+                        pc.iceGatheringState ===
+                        "complete"
+                    ) {
+
+                        clearTimeout(
+                            timeout
+                        );
+
+
+                        pc.removeEventListener(
+                            "icegatheringstatechange",
+                            check
+                        );
+
+
+                        resolve();
+                    }
+                };
+
+
+            pc.addEventListener(
+                "icegatheringstatechange",
+                check
+            );
+        }
+    );
+}
+
+
+// ============================================================
+// STOP
+// ============================================================
+
+function stopWebRTC() {
+
+    log(
+        "\nStopping..."
+    );
+
+
+    if (microphoneTrack) {
+
+        microphoneTrack.stop();
+
+        microphoneTrack =
+            null;
+    }
+
+
+    if (selectedStream) {
+
+        selectedStream
+            .getTracks()
+            .forEach(
+                track =>
+                    track.stop()
+            );
+
+        selectedStream =
+            null;
+    }
+
+
+    if (peerConnection) {
+
+        peerConnection.close();
+
+        peerConnection =
+            null;
+    }
+
+
+    audioTransceiver =
+        null;
+
+
+    log(
+        "Disconnected"
+    );
+}
+
+
+// ============================================================
+// PAGE LOAD
+// ============================================================
+
+window.addEventListener(
+    "load",
+    async () => {
+
+        await getMicrophones();
+
+    }
+);
+
+</script>
+
+</body>
+</html>
