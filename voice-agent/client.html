@@ -4,884 +4,1097 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-    <title>Voice Agent WebRTC</title>
+    <title>Voice Agent</title>
 
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            max-width: 850px;
-            margin: 40px auto;
-            padding: 20px;
+
+        * {
+            box-sizing: border-box;
         }
 
+        body {
+            margin: 0;
+            min-height: 100vh;
+
+            font-family:
+                Inter,
+                Arial,
+                sans-serif;
+
+            background:
+                radial-gradient(
+                    circle at top,
+                    #202020,
+                    #0d0d0d 55%
+                );
+
+            color: white;
+
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+
+        .container {
+
+            width: min(720px, 92vw);
+
+            padding: 40px;
+
+            background: rgba(30, 30, 30, 0.92);
+
+            border: 1px solid #333;
+
+            border-radius: 20px;
+
+            box-shadow:
+                0 20px 60px rgba(0,0,0,0.45);
+
+            text-align: center;
+        }
+
+
         h1 {
+
+            margin-top: 0;
+
+            font-size: 32px;
+        }
+
+
+        #status {
+
+            margin: 15px 0 25px;
+
+            color: #aaa;
+
+            font-size: 17px;
+        }
+
+
+        /* =========================
+           RECORDING INDICATOR
+           ========================= */
+
+        .recording {
+
+            display: flex;
+
+            justify-content: center;
+
+            align-items: center;
+
+            gap: 10px;
+
             margin-bottom: 25px;
         }
 
-        .box {
-            border: 1px solid #ccc;
-            border-radius: 10px;
-            padding: 20px;
-            margin-bottom: 20px;
+
+        #recordDot {
+
+            width: 14px;
+            height: 14px;
+
+            border-radius: 50%;
+
+            background: #555;
         }
 
-        select {
-            width: 100%;
-            padding: 12px;
-            margin: 10px 0;
-            font-size: 15px;
+
+        #recordDot.active {
+
+            background: #ff3333;
+
+            box-shadow:
+                0 0 15px #ff3333;
+
+            animation:
+                pulse 1s infinite;
         }
+
+
+        @keyframes pulse {
+
+            0% {
+                transform: scale(1);
+                opacity: 1;
+            }
+
+            50% {
+                transform: scale(1.3);
+                opacity: .5;
+            }
+
+            100% {
+                transform: scale(1);
+                opacity: 1;
+            }
+        }
+
+
+        #timer {
+
+            font-variant-numeric: tabular-nums;
+
+            color: #aaa;
+        }
+
+
+        /* =========================
+           BUTTONS
+           ========================= */
 
         button {
-            padding: 12px 18px;
+
+            width: 220px;
+
+            padding: 16px 25px;
+
             margin: 5px;
+
             border: none;
-            border-radius: 6px;
+
+            border-radius: 12px;
+
+            font-size: 18px;
+
+            font-weight: 600;
+
             cursor: pointer;
-            font-size: 15px;
+
+            transition: .15s;
         }
 
-        #status {
-            background: #111;
-            color: #00ff88;
-            padding: 15px;
-            min-height: 350px;
-            white-space: pre-wrap;
-            font-family: Consolas, monospace;
-            overflow-y: auto;
+
+        button:hover {
+
+            transform: translateY(-2px);
         }
+
+
+        #start {
+
+            background: white;
+
+            color: black;
+        }
+
+
+        #stop {
+
+            background: #d32f2f;
+
+            color: white;
+
+            display: none;
+        }
+
+
+        button:disabled {
+
+            opacity: .5;
+
+            cursor: not-allowed;
+
+            transform: none;
+        }
+
+
+        /* =========================
+           MIC LEVEL
+           ========================= */
+
+        .meter-container {
+
+            margin-top: 25px;
+
+            text-align: left;
+        }
+
+
+        .meter-label {
+
+            font-size: 13px;
+
+            color: #999;
+
+            margin-bottom: 7px;
+        }
+
+
+        .meter {
+
+            height: 10px;
+
+            background: #222;
+
+            border-radius: 10px;
+
+            overflow: hidden;
+
+            border: 1px solid #333;
+        }
+
+
+        #meterLevel {
+
+            height: 100%;
+
+            width: 0%;
+
+            background: #4caf50;
+
+            transition:
+                width .05s linear;
+        }
+
+
+        /* =========================
+           LOG
+           ========================= */
+
+        #log {
+
+            margin-top: 30px;
+
+            padding: 18px;
+
+            height: 220px;
+
+            overflow-y: auto;
+
+            background: #111;
+
+            border: 1px solid #292929;
+
+            border-radius: 12px;
+
+            text-align: left;
+
+            font-family:
+                Consolas,
+                monospace;
+
+            font-size: 13px;
+
+            line-height: 1.6;
+
+            white-space: pre-wrap;
+        }
+
+
+        .log-success {
+            color: #66bb6a;
+        }
+
+
+        .log-error {
+            color: #ef5350;
+        }
+
+
+        .log-info {
+            color: #aaa;
+        }
+
+
+        audio {
+
+            width: 100%;
+
+            margin-top: 20px;
+        }
+
     </style>
+
 </head>
+
 
 <body>
 
-<h1>🎤 Voice Agent WebRTC</h1>
+<div class="container">
+
+    <h1>🎤 Voice Agent</h1>
 
 
-<!-- ========================================================= -->
-<!-- MICROPHONE -->
-<!-- ========================================================= -->
+    <div id="status">
+        Ready
+    </div>
 
-<div class="box">
 
-    <h2>1. Microphone</h2>
+    <div class="recording">
 
-    <select id="microphone">
-        <option value="">Default microphone</option>
-    </select>
+        <div id="recordDot"></div>
 
-    <br>
+        <span id="recordText">
+            Microphone off
+        </span>
 
-    <button onclick="getMicrophones()">
-        🔄 Refresh microphones
+        <span id="timer">
+            00:00
+        </span>
+
+    </div>
+
+
+    <button id="start">
+        🎤 Start Recording
     </button>
 
-</div>
 
-
-<!-- ========================================================= -->
-<!-- DIRECT BROWSER TEST -->
-<!-- ========================================================= -->
-
-<div class="box">
-
-    <h2>2. Browser microphone test</h2>
-
-    <button onclick="recordBrowserMic()">
-        🎤 Record 5 Seconds
-    </button>
-
-</div>
-
-
-<!-- ========================================================= -->
-<!-- WEBRTC -->
-<!-- ========================================================= -->
-
-<div class="box">
-
-    <h2>3. WebRTC</h2>
-
-    <button onclick="startWebRTC()">
-        ▶ Start
-    </button>
-
-    <button onclick="stopWebRTC()">
+    <button id="stop">
         ⏹ Stop
     </button>
 
-</div>
+
+    <div class="meter-container">
+
+        <div class="meter-label">
+            Microphone level
+        </div>
+
+        <div class="meter">
+
+            <div id="meterLevel"></div>
+
+        </div>
+
+    </div>
 
 
-<!-- ========================================================= -->
-<!-- LOG -->
-<!-- ========================================================= -->
+    <div id="log"></div>
 
-<div id="status">
-Ready.
 </div>
 
 
 <script>
 
-let selectedStream = null;
-let peerConnection = null;
-let microphoneTrack = null;
-let audioTransceiver = null;
+const startButton =
+    document.getElementById("start");
 
-const microphoneSelect =
-    document.getElementById("microphone");
+const stopButton =
+    document.getElementById("stop");
 
-const statusBox =
+const status =
     document.getElementById("status");
 
+const log =
+    document.getElementById("log");
 
-// ============================================================
-// LOGGING
-// ============================================================
+const recordDot =
+    document.getElementById("recordDot");
 
-function log(message) {
+const recordText =
+    document.getElementById("recordText");
+
+const timerElement =
+    document.getElementById("timer");
+
+const meterLevel =
+    document.getElementById("meterLevel");
+
+
+let pc = null;
+
+let localStream = null;
+
+let remoteAudio = null;
+
+let audioContext = null;
+
+let analyser = null;
+
+let animationFrame = null;
+
+let startTime = null;
+
+let timerInterval = null;
+
+
+/* =========================================================
+   LOGGING
+   ========================================================= */
+
+function writeLog(message, type = "info") {
 
     console.log(message);
 
-    statusBox.textContent +=
-        "\n" + message;
+    const line =
+        document.createElement("div");
 
-    statusBox.scrollTop =
-        statusBox.scrollHeight;
+    line.textContent =
+        message;
+
+    line.className =
+        "log-" + type;
+
+    log.appendChild(line);
+
+    log.scrollTop =
+        log.scrollHeight;
 }
 
 
-function clearLog() {
+/* =========================================================
+   TIMER
+   ========================================================= */
 
-    statusBox.textContent = "";
+function startTimer() {
+
+    startTime = Date.now();
+
+    timerInterval =
+        setInterval(() => {
+
+            const elapsed =
+                Math.floor(
+                    (Date.now() - startTime) / 1000
+                );
+
+            const minutes =
+                String(
+                    Math.floor(elapsed / 60)
+                ).padStart(2, "0");
+
+            const seconds =
+                String(
+                    elapsed % 60
+                ).padStart(2, "0");
+
+            timerElement.textContent =
+                `${minutes}:${seconds}`;
+
+        }, 250);
 }
 
 
-// ============================================================
-// GET MICROPHONES
-// ============================================================
+function stopTimer() {
 
-async function getMicrophones() {
+    if (timerInterval) {
+
+        clearInterval(timerInterval);
+
+        timerInterval = null;
+    }
+
+    timerElement.textContent =
+        "00:00";
+}
+
+
+/* =========================================================
+   MICROPHONE LEVEL METER
+   ========================================================= */
+
+async function startMicMeter(stream) {
 
     try {
 
-        /*
-         * Request permission first.
-         * This allows Chrome/Edge to expose
-         * actual microphone names.
-         */
+        audioContext =
+            new (
+                window.AudioContext ||
+                window.webkitAudioContext
+            )();
 
-        const tempStream =
-            await navigator.mediaDevices
-                .getUserMedia({
-                    audio: true
-                });
+        const source =
+            audioContext.createMediaStreamSource(
+                stream
+            );
 
+        analyser =
+            audioContext.createAnalyser();
 
-        tempStream
-            .getTracks()
-            .forEach(
-                track => track.stop()
+        analyser.fftSize = 1024;
+
+        source.connect(analyser);
+
+        const data =
+            new Uint8Array(
+                analyser.fftSize
             );
 
 
-        const devices =
-            await navigator.mediaDevices
-                .enumerateDevices();
+        function updateMeter() {
 
+            if (!analyser) {
+                return;
+            }
 
-        microphoneSelect.innerHTML = "";
-
-
-        const microphones =
-            devices.filter(
-                device =>
-                    device.kind ===
-                    "audioinput"
+            analyser.getByteTimeDomainData(
+                data
             );
 
 
-        for (
-            const device
-            of microphones
-        ) {
+            let sum = 0;
 
-            const option =
-                document.createElement(
-                    "option"
+            for (let i = 0; i < data.length; i++) {
+
+                const value =
+                    (data[i] - 128) / 128;
+
+                sum += value * value;
+            }
+
+
+            const rms =
+                Math.sqrt(
+                    sum / data.length
                 );
 
 
-            option.value =
-                device.deviceId;
+            /*
+             * Convert RMS to a visible percentage.
+             *
+             * This is ONLY a browser-side visual meter.
+             * It does not affect the audio sent to WebRTC.
+             */
+
+            const level =
+                Math.min(
+                    100,
+                    rms * 350
+                );
 
 
-            option.textContent =
-                device.label ||
-                "Microphone";
+            meterLevel.style.width =
+                level + "%";
 
 
-            microphoneSelect
-                .appendChild(option);
+            animationFrame =
+                requestAnimationFrame(
+                    updateMeter
+                );
         }
 
 
-        log(
-            `Found ${microphones.length} microphone(s)`
+        updateMeter();
+
+        writeLog(
+            "🎚 Microphone level meter started"
         );
-
-
-        microphones.forEach(
-            (mic, index) => {
-
-                log(
-                    `${index + 1}. ${mic.label}`
-                );
-            }
-        );
-
 
     } catch (error) {
 
-        log(
-            "❌ Microphone error: " +
-            error
+        writeLog(
+            "Mic meter error: " +
+            error.message,
+            "error"
         );
     }
 }
 
 
-// ============================================================
-// GET MICROPHONE STREAM
-// ============================================================
+function stopMicMeter() {
 
-async function getMicrophoneStream() {
+    if (animationFrame) {
 
-    const deviceId =
-        microphoneSelect.value;
+        cancelAnimationFrame(
+            animationFrame
+        );
 
-
-    const constraints = {
-
-        audio: {
-
-            channelCount: {
-                ideal: 1
-            },
-
-            sampleRate: {
-                ideal: 48000
-            },
-
-            sampleSize: {
-                ideal: 16
-            },
-
-            echoCancellation: false,
-
-            noiseSuppression: false,
-
-            autoGainControl: false
-        },
-
-        video: false
-    };
-
-
-    if (deviceId) {
-
-        constraints.audio.deviceId = {
-            exact: deviceId
-        };
+        animationFrame = null;
     }
 
 
-    log(
-        "🎤 Requesting microphone..."
-    );
+    meterLevel.style.width =
+        "0%";
 
 
-    const stream =
-        await navigator.mediaDevices
-            .getUserMedia(
-                constraints
-            );
+    if (audioContext) {
 
+        audioContext.close();
 
-    const track =
-        stream.getAudioTracks()[0];
+        audioContext = null;
+    }
 
-
-    log(
-        "🎤 Microphone: " +
-        track.label
-    );
-
-
-    log(
-        "🎤 Track state: " +
-        track.readyState
-    );
-
-
-    const settings =
-        track.getSettings();
-
-
-    log(
-        "\n========== MICROPHONE =========="
-    );
-
-
-    log(
-        "sampleRate: " +
-        settings.sampleRate
-    );
-
-
-    log(
-        "sampleSize: " +
-        settings.sampleSize
-    );
-
-
-    log(
-        "channelCount: " +
-        settings.channelCount
-    );
-
-
-    log(
-        "echoCancellation: " +
-        settings.echoCancellation
-    );
-
-
-    log(
-        "noiseSuppression: " +
-        settings.noiseSuppression
-    );
-
-
-    log(
-        "autoGainControl: " +
-        settings.autoGainControl
-    );
-
-
-    log(
-        "================================"
-    );
-
-
-    return stream;
+    analyser = null;
 }
 
 
-// ============================================================
-// DIRECT BROWSER RECORDING
-// ============================================================
+/* =========================================================
+   ICE
+   ========================================================= */
 
-async function recordBrowserMic() {
+function waitForIceGathering() {
 
-    clearLog();
+    return new Promise(resolve => {
 
+        if (!pc) {
 
-    log(
-        "🎤 Starting browser microphone test..."
-    );
+            resolve();
 
-
-    try {
-
-        const stream =
-            await getMicrophoneStream();
+            return;
+        }
 
 
-        selectedStream =
-            stream;
-
-
-        const mimeTypes = [
-
-            "audio/webm;codecs=opus",
-
-            "audio/webm",
-
-            "audio/ogg;codecs=opus"
-        ];
-
-
-        let mimeType = "";
-
-
-        for (
-            const type
-            of mimeTypes
+        if (
+            pc.iceGatheringState ===
+            "complete"
         ) {
+
+            resolve();
+
+            return;
+        }
+
+
+        function checkState() {
 
             if (
-                MediaRecorder
-                    .isTypeSupported(type)
+                pc.iceGatheringState ===
+                "complete"
             ) {
 
-                mimeType =
-                    type;
+                pc.removeEventListener(
+                    "icegatheringstatechange",
+                    checkState
+                );
 
-                break;
+                resolve();
             }
         }
 
 
-        log(
-            "Recorder: " +
-            mimeType
+        pc.addEventListener(
+            "icegatheringstatechange",
+            checkState
         );
 
 
-        const recorder =
-            new MediaRecorder(
-                stream,
-                mimeType
-                    ? {
-                        mimeType:
-                            mimeType
-                    }
-                    : undefined
+        /*
+         * Safety timeout.
+         *
+         * Normally ICE completes almost immediately
+         * on localhost.
+         */
+
+        setTimeout(() => {
+
+            pc?.removeEventListener(
+                "icegatheringstatechange",
+                checkState
             );
 
+            resolve();
 
-        const chunks = [];
+        }, 5000);
 
-
-        recorder.ondataavailable =
-            event => {
-
-                if (
-                    event.data &&
-                    event.data.size > 0
-                ) {
-
-                    chunks.push(
-                        event.data
-                    );
-                }
-            };
-
-
-        recorder.onerror =
-            event => {
-
-                log(
-                    "❌ Recorder error"
-                );
-
-                console.error(event);
-            };
-
-
-        recorder.onstop =
-            () => {
-
-                const blob =
-                    new Blob(
-                        chunks,
-                        {
-                            type:
-                                recorder.mimeType
-                        }
-                    );
-
-
-                const url =
-                    URL.createObjectURL(
-                        blob
-                    );
-
-
-                const link =
-                    document.createElement(
-                        "a"
-                    );
-
-
-                link.href = url;
-
-                link.download =
-                    "browser_mic.webm";
-
-
-                document.body.appendChild(
-                    link
-                );
-
-
-                link.click();
-
-
-                link.remove();
-
-
-                setTimeout(
-                    () =>
-                        URL.revokeObjectURL(
-                            url
-                        ),
-                    1000
-                );
-
-
-                log(
-                    "\n✅ browser_mic.webm saved"
-                );
-
-
-                log(
-                    "Listen to the file."
-                );
-
-
-                stream
-                    .getTracks()
-                    .forEach(
-                        track =>
-                            track.stop()
-                    );
-            };
-
-
-        log(
-            "🔴 Recording for 5 seconds..."
-        );
-
-
-        recorder.start(100);
-
-
-        setTimeout(
-            () => {
-
-                if (
-                    recorder.state ===
-                    "recording"
-                ) {
-
-                    recorder.stop();
-                }
-
-            },
-            5000
-        );
-
-
-    } catch (error) {
-
-        log(
-            "❌ Browser recording failed:\n" +
-            error
-        );
-    }
+    });
 }
 
 
-// ============================================================
-// WEBRTC
-// ============================================================
+/* =========================================================
+   START
+   ========================================================= */
 
-async function startWebRTC() {
+async function startVoiceAgent() {
 
-    clearLog();
+    if (pc) {
 
+        writeLog(
+            "Already connected.",
+            "error"
+        );
 
-    log(
-        "Starting WebRTC..."
-    );
+        return;
+    }
 
 
     try {
 
-        // ----------------------------------------------------
-        // MICROPHONE
-        // ----------------------------------------------------
+        startButton.style.display =
+            "none";
 
-        const stream =
-            await getMicrophoneStream();
-
-
-        selectedStream =
-            stream;
+        stopButton.style.display =
+            "inline-block";
 
 
-        microphoneTrack =
-            stream.getAudioTracks()[0];
+        status.textContent =
+            "Requesting microphone...";
 
 
-        // ----------------------------------------------------
-        // PEER CONNECTION
-        // ----------------------------------------------------
+        writeLog(
+            "=================================================="
+        );
 
-        peerConnection =
-            new RTCPeerConnection({
-                iceServers: []
+        writeLog(
+            "Starting voice agent..."
+        );
+
+
+        /* =====================================================
+           MICROPHONE
+
+           IMPORTANT:
+           Do NOT force stereo.
+
+           We allow the browser to choose the native microphone
+           format. The server's frame_to_float32() handles the
+           actual aiortc decoded stereo/packed frame correctly.
+           ===================================================== */
+
+        localStream =
+            await navigator.mediaDevices.getUserMedia({
+
+                audio: {
+
+                    echoCancellation: true,
+
+                    noiseSuppression: true,
+
+                    autoGainControl: false,
+
+                    /*
+                     * Do not force channelCount: 2.
+                     */
+
+                    sampleRate: 48000
+
+                }
+
             });
 
 
-        log(
-            "PeerConnection created"
+        writeLog(
+            "🎤 Microphone permission granted.",
+            "success"
         );
 
 
-        // ----------------------------------------------------
-        // CONNECTION EVENTS
-        // ----------------------------------------------------
+        const micTracks =
+            localStream.getAudioTracks();
 
-        peerConnection
-            .oniceconnectionstatechange =
+
+        if (micTracks.length === 0) {
+
+            throw new Error(
+                "No microphone audio track found."
+            );
+        }
+
+
+        const micTrack =
+            micTracks[0];
+
+
+        writeLog(
+            "🎤 Track: " +
+            micTrack.label
+        );
+
+
+        writeLog(
+            "🎤 Track state: " +
+            micTrack.readyState
+        );
+
+
+        /*
+         * Show the actual browser settings.
+         */
+
+        try {
+
+            const settings =
+                micTrack.getSettings();
+
+            writeLog(
+                "🎤 Mic settings: " +
+                JSON.stringify(
+                    settings
+                )
+            );
+
+        } catch (_) {}
+
+
+        await startMicMeter(
+            localStream
+        );
+
+
+        /* =====================================================
+           PEER CONNECTION
+           ===================================================== */
+
+        pc =
+            new RTCPeerConnection({
+
+                /*
+                 * Localhost does not need STUN.
+                 *
+                 * This keeps the connection simple.
+                 */
+
+                iceServers: []
+
+            });
+
+
+        pc.onconnectionstatechange =
             () => {
 
-                log(
-                    "ICE state: " +
-                    peerConnection
-                        .iceConnectionState
-                );
-            };
+                if (!pc) {
+                    return;
+                }
 
 
-        peerConnection
-            .onconnectionstatechange =
-            () => {
-
-                log(
-                    "Connection state: " +
-                    peerConnection
-                        .connectionState
+                writeLog(
+                    "Connection: " +
+                    pc.connectionState
                 );
 
 
                 if (
-                    peerConnection
-                        .connectionState ===
+                    pc.connectionState ===
+                    "connected"
+                ) {
+
+                    status.textContent =
+                        "🟢 Listening — speak now";
+
+                    recordDot.classList.add(
+                        "active"
+                    );
+
+                    recordText.textContent =
+                        "Microphone active";
+
+                    startTimer();
+
+                    writeLog(
+                        "🟢 WebRTC connected.",
+                        "success"
+                    );
+                }
+
+
+                if (
+                    pc.connectionState ===
                     "failed"
                 ) {
 
-                    log(
-                        "❌ WebRTC connection failed"
+                    status.textContent =
+                        "❌ Connection failed";
+
+                    writeLog(
+                        "WebRTC connection failed.",
+                        "error"
+                    );
+                }
+
+
+                if (
+                    pc.connectionState ===
+                    "disconnected"
+                ) {
+
+                    writeLog(
+                        "⚠ WebRTC disconnected.",
+                        "error"
                     );
                 }
             };
 
 
-        peerConnection
-            .onicegatheringstatechange =
+        pc.oniceconnectionstatechange =
             () => {
 
-                log(
-                    "ICE gathering: " +
-                    peerConnection
-                        .iceGatheringState
+                if (!pc) {
+                    return;
+                }
+
+                writeLog(
+                    "ICE: " +
+                    pc.iceConnectionState
                 );
             };
 
 
-        // ----------------------------------------------------
-        // AUDIO TRANSCEIVER
-        //
-        // IMPORTANT:
-        // Do NOT use addTrack() here.
-        // We explicitly create an audio
-        // send-only transceiver.
-        // ----------------------------------------------------
+        pc.onicegatheringstatechange =
+            () => {
 
-        audioTransceiver =
-            peerConnection
-                .addTransceiver(
-                    "audio",
-                    {
-                        direction:
-                            "sendonly"
-                    }
+                writeLog(
+                    "ICE gathering: " +
+                    pc.iceGatheringState
                 );
+            };
 
 
-        log(
-            "Audio transceiver created"
+        /* =====================================================
+           BROWSER -> SERVER MICROPHONE
+           ===================================================== */
+
+        pc.addTrack(
+            micTrack,
+            localStream
         );
 
 
-        // ----------------------------------------------------
-        // FORCE OPUS
-        // ----------------------------------------------------
+        writeLog(
+            "🎤 Microphone track attached."
+        );
 
-        const capabilities =
-            RTCRtpSender
-                .getCapabilities(
+
+        /* =====================================================
+           SERVER -> BROWSER AUDIO
+           ===================================================== */
+
+        pc.addTransceiver(
+            "audio",
+            {
+                direction: "recvonly"
+            }
+        );
+
+
+        pc.ontrack =
+            event => {
+
+                writeLog(
+                    "🔊 Audio track received from server.",
+                    "success"
+                );
+
+
+                if (
+                    event.track.kind !==
                     "audio"
-                );
+                ) {
+
+                    return;
+                }
 
 
-        if (
-            capabilities &&
-            capabilities.codecs
-        ) {
+                /*
+                 * Reuse one audio element.
+                 * Do not create a new element for every
+                 * server response.
+                 */
 
-            const opusCodecs =
-                capabilities.codecs
-                    .filter(
-                        codec =>
-                            codec.mimeType
-                                .toLowerCase() ===
-                            "audio/opus"
-                    );
+                if (!remoteAudio) {
 
+                    remoteAudio =
+                        document.createElement(
+                            "audio"
+                        );
 
-            if (
-                opusCodecs.length > 0
-            ) {
+                    remoteAudio.autoplay =
+                        true;
 
-                audioTransceiver
-                    .setCodecPreferences(
-                        opusCodecs
-                    );
+                    remoteAudio.controls =
+                        true;
 
+                    remoteAudio.style.display =
+                        "block";
 
-                log(
-                    "✅ Opus codec selected"
-                );
-
-            } else {
-
-                log(
-                    "⚠️ Opus codec not found"
-                );
-            }
-        }
+                    document
+                        .querySelector(
+                            ".container"
+                        )
+                        .appendChild(
+                            remoteAudio
+                        );
+                }
 
 
-        // ----------------------------------------------------
-        // ATTACH MICROPHONE
-        // ----------------------------------------------------
-
-        await audioTransceiver
-            .sender
-            .replaceTrack(
-                microphoneTrack
-            );
+                remoteAudio.srcObject =
+                    event.streams[0];
 
 
-        log(
-            "🎤 Microphone track attached"
+                remoteAudio
+                    .play()
+                    .then(() => {
+
+                        writeLog(
+                            "🔊 Assistant audio playing.",
+                            "success"
+                        );
+
+                    })
+                    .catch(error => {
+
+                        writeLog(
+                            "Browser blocked audio autoplay: " +
+                            error.message,
+                            "error"
+                        );
+
+                    });
+            };
+
+
+        /* =====================================================
+           OFFER
+           ===================================================== */
+
+        status.textContent =
+            "Creating connection...";
+
+
+        writeLog(
+            "Creating WebRTC offer..."
         );
 
-
-        // ----------------------------------------------------
-        // TRACK INFO
-        // ----------------------------------------------------
-
-        const sender =
-            audioTransceiver.sender;
-
-
-        const parameters =
-            sender.getParameters();
-
-
-        if (
-            parameters.encodings &&
-            parameters.encodings.length
-        ) {
-
-            /*
-             * Keep a single audio encoding.
-             */
-
-            parameters.encodings =
-                parameters.encodings.map(
-                    encoding => ({
-                        ...encoding,
-                        maxBitrate:
-                            128000
-                    })
-                );
-
-
-            try {
-
-                await sender
-                    .setParameters(
-                        parameters
-                    );
-
-                log(
-                    "Audio bitrate: 128 kbps"
-                );
-
-            } catch (error) {
-
-                log(
-                    "⚠️ Could not set bitrate: " +
-                    error
-                );
-            }
-        }
-
-
-        // ----------------------------------------------------
-        // CREATE OFFER
-        // ----------------------------------------------------
 
         const offer =
-            await peerConnection
-                .createOffer();
+            await pc.createOffer();
 
 
-        log(
-            "Offer created"
+        await pc.setLocalDescription(
+            offer
         );
 
 
-        await peerConnection
-            .setLocalDescription(
-                offer
-            );
+        /* =====================================================
+           ICE
+           ===================================================== */
 
-
-        log(
-            "Local description set"
+        writeLog(
+            "Waiting for ICE gathering..."
         );
 
 
-        // ----------------------------------------------------
-        // WAIT FOR ICE
-        // ----------------------------------------------------
+        await waitForIceGathering();
 
-        await waitForIceGathering(
-            peerConnection
+
+        writeLog(
+            "ICE gathering complete.",
+            "success"
         );
 
 
-        log(
-            "ICE gathering complete"
-        );
+        /* =====================================================
+           SEND OFFER
+           ===================================================== */
+
+        /*
+         * IMPORTANT:
+         *
+         * This page is expected to be served by the SAME
+         * FastAPI server:
+         *
+         * http://127.0.0.1:8000/
+         *
+         * Therefore we use "/offer".
+         */
+
+        const offerUrl =
+            "/offer";
 
 
-        // ----------------------------------------------------
-        // SEND TO SERVER
-        // ----------------------------------------------------
-
-        const url =
-            "http://127.0.0.1:8000/offer";
-
-
-        log(
-            "Sending offer to " + url
+        writeLog(
+            "Sending offer to " +
+            offerUrl
         );
 
 
         const response =
             await fetch(
-                url,
+                offerUrl,
                 {
+
                     method: "POST",
 
                     headers: {
@@ -889,35 +1102,30 @@ async function startWebRTC() {
                             "application/json"
                     },
 
-                    body:
-                        JSON.stringify({
-                            sdp:
-                                peerConnection
-                                    .localDescription
-                                    .sdp,
+                    body: JSON.stringify({
 
-                            type:
-                                peerConnection
-                                    .localDescription
-                                    .type
-                        })
+                        sdp:
+                            pc.localDescription.sdp,
+
+                        type:
+                            pc.localDescription.type
+
+                    })
+
                 }
             );
 
 
-        log(
-            "Server response: " +
-            response.status
-        );
-
-
         if (!response.ok) {
 
-            const errorText =
+            const body =
                 await response.text();
 
             throw new Error(
-                errorText
+                "Server returned HTTP " +
+                response.status +
+                ": " +
+                body
             );
         }
 
@@ -926,174 +1134,193 @@ async function startWebRTC() {
             await response.json();
 
 
-        log(
-            "Answer received"
+        writeLog(
+            "Server answer received."
         );
 
 
-        await peerConnection
-            .setRemoteDescription(
+        /* =====================================================
+           SERVER ANSWER
+           ===================================================== */
+
+        await pc.setRemoteDescription(
+            new RTCSessionDescription(
                 answer
-            );
-
-
-        log(
-            "Remote description set"
+            )
         );
 
 
-        log(
-            "================================"
+        writeLog(
+            "✅ Remote description set.",
+            "success"
         );
 
-        log(
-            "✅ WebRTC negotiation completed"
-        );
 
-        log(
-            "================================"
-        );
+        status.textContent =
+            "🟢 Listening — speak now";
 
 
     } catch (error) {
 
-        log(
-            "❌ WebRTC error:\n" +
-            error
+        console.error(error);
+
+
+        writeLog(
+            "❌ ERROR: " +
+            error.message,
+            "error"
         );
 
-        console.error(error);
+
+        status.textContent =
+            "❌ " +
+            error.message;
+
+
+        await stopVoiceAgent();
     }
 }
 
 
-// ============================================================
-// ICE GATHERING
-// ============================================================
+/* =========================================================
+   STOP
+   ========================================================= */
 
-function waitForIceGathering(pc) {
+async function stopVoiceAgent() {
 
-    return new Promise(
-        resolve => {
-
-            if (
-                pc.iceGatheringState ===
-                "complete"
-            ) {
-
-                resolve();
-
-                return;
-            }
-
-
-            const timeout =
-                setTimeout(
-                    () => {
-
-                        resolve();
-
-                    },
-                    5000
-                );
-
-
-            const check =
-                () => {
-
-                    if (
-                        pc.iceGatheringState ===
-                        "complete"
-                    ) {
-
-                        clearTimeout(
-                            timeout
-                        );
-
-
-                        pc.removeEventListener(
-                            "icegatheringstatechange",
-                            check
-                        );
-
-
-                        resolve();
-                    }
-                };
-
-
-            pc.addEventListener(
-                "icegatheringstatechange",
-                check
-            );
-        }
-    );
-}
-
-
-// ============================================================
-// STOP
-// ============================================================
-
-function stopWebRTC() {
-
-    log(
-        "\nStopping..."
+    writeLog(
+        "Stopping voice agent..."
     );
 
 
-    if (microphoneTrack) {
+    stopTimer();
 
-        microphoneTrack.stop();
-
-        microphoneTrack =
-            null;
-    }
+    stopMicMeter();
 
 
-    if (selectedStream) {
+    recordDot.classList.remove(
+        "active"
+    );
 
-        selectedStream
+    recordText.textContent =
+        "Microphone off";
+
+
+    /* =====================================================
+       STOP MICROPHONE
+       ===================================================== */
+
+    if (localStream) {
+
+        localStream
             .getTracks()
-            .forEach(
-                track =>
-                    track.stop()
-            );
+            .forEach(track => {
 
-        selectedStream =
-            null;
+                try {
+                    track.stop();
+                } catch (_) {}
+
+            });
+
+        localStream = null;
     }
 
 
-    if (peerConnection) {
+    /* =====================================================
+       CLOSE PEER CONNECTION
+       ===================================================== */
 
-        peerConnection.close();
+    if (pc) {
 
-        peerConnection =
-            null;
+        try {
+            pc.close();
+        } catch (_) {}
+
+        pc = null;
     }
 
 
-    audioTransceiver =
-        null;
+    /* =====================================================
+       REMOVE AUDIO
+       ===================================================== */
+
+    if (remoteAudio) {
+
+        try {
+
+            remoteAudio.pause();
+
+            remoteAudio.srcObject = null;
+
+            remoteAudio.remove();
+
+        } catch (_) {}
+
+        remoteAudio = null;
+    }
 
 
-    log(
-        "Disconnected"
+    startButton.style.display =
+        "inline-block";
+
+    stopButton.style.display =
+        "none";
+
+
+    status.textContent =
+        "Stopped";
+
+
+    writeLog(
+        "🛑 Voice agent stopped."
     );
 }
 
 
-// ============================================================
-// PAGE LOAD
-// ============================================================
+/* =========================================================
+   BUTTONS
+   ========================================================= */
+
+startButton.addEventListener(
+    "click",
+    startVoiceAgent
+);
+
+
+stopButton.addEventListener(
+    "click",
+    stopVoiceAgent
+);
+
+
+/* =========================================================
+   PAGE CLOSE
+   ========================================================= */
 
 window.addEventListener(
-    "load",
-    async () => {
+    "beforeunload",
+    () => {
 
-        await getMicrophones();
+        if (localStream) {
 
+            localStream
+                .getTracks()
+                .forEach(track => {
+
+                    try {
+                        track.stop();
+                    } catch (_) {}
+
+                });
+        }
+
+
+        if (pc) {
+
+            try {
+                pc.close();
+            } catch (_) {}
+        }
     }
 );
 

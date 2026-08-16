@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Voice Agent</title>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 700px;
+            margin: 60px auto;
+            padding: 20px;
+            text-align: center;
+            background: #fafafa;
+        }
+
+        h1 {
+            margin-bottom: 30px;
+        }
+
+        button {
+            font-size: 18px;
+            padding: 14px 28px;
+            cursor: pointer;
+            border-radius: 10px;
+            border: none;
+            margin: 5px;
+        }
+
+        #start {
+            background: #222;
+            color: white;
+        }
+
+        #stop {
+            background: #c62828;
+            color: white;
+            display: none;
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        #status {
+            margin-top: 25px;
+            font-size: 18px;
+            font-weight: bold;
+        }
+
+        #log {
+            margin-top: 25px;
+            padding: 15px;
+            background: white;
+            border: 1px solid #ddd;
+            text-align: left;
+            min-height: 150px;
+            white-space: pre-wrap;
+            border-radius: 8px;
+            font-family: monospace;
+            overflow-y: auto;
+        }
+
+        audio {
+            width: 100%;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+
+<body>
+
+<h1>🎤 Voice Agent</h1>
+
+<button id="start">Start Voice Agent</button>
+<button id="stop">Stop</button>
+
+<div id="status">Ready</div>
+
+<div id="log"></div>
+
+<script>
+
+const startButton = document.getElementById("start");
+const stopButton = document.getElementById("stop");
+const status = document.getElementById("status");
+const log = document.getElementById("log");
+
+let pc = null;
+let localStream = null;
+let remoteAudio = null;
+
+
+function writeLog(message) {
+    console.log(message);
+    log.textContent += message + "\n";
+    log.scrollTop = log.scrollHeight;
+}
+
+
+function waitForIceGathering() {
+
+    return new Promise(resolve => {
+
+        if (!pc || pc.iceGatheringState === "complete") {
+            resolve();
+            return;
+        }
+
+        const timeout = setTimeout(() => {
+            writeLog("ICE gathering timeout — continuing");
+            resolve();
+        }, 5000);
+
+        function check() {
+
+            if (pc.iceGatheringState === "complete") {
+
+                clearTimeout(timeout);
+
+                pc.removeEventListener(
+                    "icegatheringstatechange",
+                    check
+                );
+
+                resolve();
+            }
+        }
+
+        pc.addEventListener(
+            "icegatheringstatechange",
+            check
+        );
+    });
+}
+
+
+async function startVoiceAgent() {
+
+    try {
+
+        startButton.style.display = "none";
+        stopButton.style.display = "inline-block";
+
+        status.textContent = "Requesting microphone...";
+        writeLog("==================================================");
+        writeLog("Starting voice agent");
+        writeLog("==================================================");
+
+
+        // --------------------------------------------------
+        // MICROPHONE
+        // --------------------------------------------------
+
+        localStream =
+            await navigator.mediaDevices.getUserMedia({
+
+                audio: {
+                    echoCancellation: true,
+                    noiseSuppression: true,
+                    autoGainControl: false,
+                    channelCount: 2,
+                    sampleRate: 48000
+                }
+
+            });
+
+        writeLog("🎤 Microphone permission granted");
+
+
+        const tracks = localStream.getAudioTracks();
+
+        if (tracks.length === 0) {
+            throw new Error("No microphone track found");
+        }
+
+        writeLog(
+            "Microphone: " +
+            tracks[0].label
+        );
+
+
+        // --------------------------------------------------
+        // PEER CONNECTION
+        // --------------------------------------------------
+
+        pc = new RTCPeerConnection();
+
+        pc.onconnectionstatechange = () => {
+
+            writeLog(
+                "Connection: " +
+                pc.connectionState
+            );
+
+            if (pc.connectionState === "connected") {
+
+                status.textContent =
+                    "🟢 Connected — Speak now";
+
+            }
+
+            if (pc.connectionState === "failed") {
+
+                status.textContent =
+                    "❌ Connection failed";
+
+            }
+
+        };
+
+
+        pc.oniceconnectionstatechange = () => {
+
+            writeLog(
+                "ICE: " +
+                pc.iceConnectionState
+            );
+
+        };
+
+
+        // --------------------------------------------------
+        // SEND MICROPHONE TO SERVER
+        // --------------------------------------------------
+
+        for (const track of tracks) {
+
+            pc.addTrack(
+                track,
+                localStream
+            );
+
+            writeLog(
+                "🎤 Microphone track attached"
+            );
+        }
+
+
+        // --------------------------------------------------
+        // RECEIVE SERVER AUDIO
+        // --------------------------------------------------
+
+        pc.addTransceiver(
+            "audio",
+            {
+                direction: "recvonly"
+            }
+        );
+
+
+        pc.ontrack = event => {
+
+            writeLog(
+                "🔊 Assistant audio received"
+            );
+
+            if (event.track.kind !== "audio") {
+                return;
+            }
+
+
+            if (remoteAudio) {
+                remoteAudio.remove();
+            }
+
+
+            remoteAudio =
+                document.createElement("audio");
+
+            remoteAudio.autoplay = true;
+            remoteAudio.controls = true;
+
+            remoteAudio.srcObject =
+                event.streams[0];
+
+            document.body.appendChild(
+                remoteAudio
+            );
+
+
+            remoteAudio.play()
+                .then(() => {
+
+                    writeLog(
+                        "🔊 Playing assistant audio"
+                    );
+
+                })
+                .catch(error => {
+
+                    writeLog(
+                        "⚠️ Audio autoplay blocked: " +
+                        error.message
+                    );
+
+                });
+
+        };
+
+
+        // --------------------------------------------------
+        // CREATE OFFER
+        // --------------------------------------------------
+
+        status.textContent =
+            "Creating connection...";
+
+        writeLog(
+            "Creating WebRTC offer..."
+        );
+
+        const offer =
+            await pc.createOffer();
+
+        await pc.setLocalDescription(
+            offer
+        );
+
+
+        // --------------------------------------------------
+        // ICE
+        // --------------------------------------------------
+
+        writeLog(
+            "Waiting for ICE gathering..."
+        );
+
+        await waitForIceGathering();
+
+        writeLog(
+            "ICE gathering complete"
+        );
+
+
+        // --------------------------------------------------
+        // SEND OFFER
+        // --------------------------------------------------
+
+        writeLog(
+            "Sending offer to /offer..."
+        );
+
+
+        const response =
+            await fetch(
+                "/offer",
+                {
+                    method: "POST",
+
+                    headers: {
+                        "Content-Type":
+                            "application/json"
+                    },
+
+                    body: JSON.stringify({
+
+                        sdp:
+                            pc.localDescription.sdp,
+
+                        type:
+                            pc.localDescription.type
+
+                    })
+                }
+            );
+
+
+        if (!response.ok) {
+
+            const text =
+                await response.text();
+
+            throw new Error(
+                "Server returned HTTP " +
+                response.status +
+                ": " +
+                text
+            );
+        }
+
+
+        const answer =
+            await response.json();
+
+
+        writeLog(
+            "Server answer received"
+        );
+
+
+        // --------------------------------------------------
+        // SERVER ANSWER
+        // --------------------------------------------------
+
+        await pc.setRemoteDescription(
+            new RTCSessionDescription(answer)
+        );
+
+
+        writeLog(
+            "✅ Remote description set"
+        );
+
+        status.textContent =
+            "🟢 Listening — speak now";
+
+    }
+
+    catch (error) {
+
+        console.error(error);
+
+        writeLog(
+            "❌ ERROR: " +
+            error.message
+        );
+
+        status.textContent =
+            "Error: " +
+            error.message;
+
+        stopVoiceAgent();
+    }
+}
+
+
+function stopVoiceAgent() {
+
+    writeLog("Stopping voice agent...");
+
+
+    if (localStream) {
+
+        localStream
+            .getTracks()
+            .forEach(track => {
+                track.stop();
+            });
+
+        localStream = null;
+    }
+
+
+    if (pc) {
+
+        pc.close();
+        pc = null;
+    }
+
+
+    if (remoteAudio) {
+
+        remoteAudio.pause();
+        remoteAudio.srcObject = null;
+        remoteAudio.remove();
+
+        remoteAudio = null;
+    }
+
+
+    startButton.style.display =
+        "inline-block";
+
+    stopButton.style.display =
+        "none";
+
+    status.textContent =
+        "Stopped";
+
+    writeLog(
+        "🛑 Voice agent stopped"
+    );
+}
+
+
+startButton.addEventListener(
+    "click",
+    startVoiceAgent
+);
+
+stopButton.addEventListener(
+    "click",
+    stopVoiceAgent
+);
+
+</script>
+
+</body>
+</html>

@@ -2,7 +2,6 @@ from piper import PiperVoice
 import wave
 import os
 import sys
-import subprocess
 
 MODEL = "en_US-lessac-medium.onnx"
 OUTPUT = "speech.wav"
@@ -24,23 +23,25 @@ def speak(text):
 
     print("Saved:", OUTPUT)
 
-    # Automatically play the WAV on Windows
-    print("Playing speech...")
-
-    subprocess.run(
-        ["powershell", "-c",
-         f'(New-Object Media.SoundPlayer "{os.path.abspath(OUTPUT)}").PlaySync()'],
-        check=False
-    )
-
-    print("Playback finished.")
+    # ------------------------------------------------------------
+    # NOTE:
+    #
+    # We no longer play this audio locally on the server via
+    # PowerShell/SoundPlayer. Playing it through the server
+    # machine's speakers was being picked up by the browser's
+    # microphone (feedback) and/or briefly disrupting the mic
+    # input device, which was killing the WebRTC audio track
+    # right after every response.
+    #
+    # server.py now streams this wav file back to the browser
+    # over the WebRTC connection itself (see AssistantAudioTrack),
+    # so it plays through the *browser's* <audio> element instead.
+    # ------------------------------------------------------------
 
 
 if __name__ == "__main__":
-
     if len(sys.argv) > 1:
         text = " ".join(sys.argv[1:])
     else:
         text = "Hello, this is your voice agent."
-
     speak(text)
